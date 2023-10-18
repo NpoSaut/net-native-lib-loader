@@ -28,12 +28,19 @@ namespace NetNativeLibLoader.PathResolver
     {
         public ResolvePathResult Resolve(string library)
         {
-            string libraryLocation;
+            DirectoryInfo parent = null;
+            string        libraryLocation;
 
             var entryAssembly = Assembly.GetEntryAssembly();
-            if (!(entryAssembly is null) && Directory.GetParent(entryAssembly.Location) is var parentDirectory)
+            if (entryAssembly != null)
             {
-                var executingDir = parentDirectory.FullName;
+                var entryLocation = entryAssembly.Location;
+                parent = Directory.GetParent(!string.IsNullOrEmpty(entryLocation) ? entryLocation : Directory.GetCurrentDirectory());
+            }
+
+            if (parent != null)
+            {
+                var executingDir = parent.FullName;
 
                 libraryLocation = Path.GetFullPath(Path.Combine(executingDir, library));
                 if (File.Exists(libraryLocation))

@@ -32,11 +32,36 @@ namespace NetNativeLibLoader.PathResolver
         public LocalPathResolver()
         {
             var entryAssembly = Assembly.GetEntryAssembly();
-            _entryAssemblyDirectory = entryAssembly is null
-                ? null
-                : Directory.GetParent(entryAssembly.Location).FullName;
+            if (entryAssembly != null)
+            {
+                var entryLocation = entryAssembly.Location;
+                if (!string.IsNullOrEmpty(entryLocation))
+                {
+                    var parent = Directory.GetParent(entryLocation);
+                    _entryAssemblyDirectory = parent != null ? parent.FullName : entryLocation;
+                }
+                else
+                {
+                    var parent = Directory.GetParent(Directory.GetCurrentDirectory());
+                    _entryAssemblyDirectory = parent != null ? parent.FullName : Directory.GetCurrentDirectory(); 
+                }
+            }
+            else
+            {
+                _entryAssemblyDirectory = null;
+            }
 
-            _executingAssemblyDirectory = Directory.GetParent(Assembly.GetExecutingAssembly().Location).FullName;
+            var executingLocation = Assembly.GetExecutingAssembly().Location;
+            if (!string.IsNullOrEmpty(executingLocation))
+            {
+                var parent = Directory.GetParent(executingLocation);
+                _executingAssemblyDirectory = parent != null ? parent.FullName : executingLocation;
+            }
+            else
+            {
+                var parent = Directory.GetParent(Directory.GetCurrentDirectory());
+                _executingAssemblyDirectory = parent != null ? parent.FullName : Directory.GetCurrentDirectory(); 
+            }
 
             _currentDirectory = Directory.GetCurrentDirectory();
         }
