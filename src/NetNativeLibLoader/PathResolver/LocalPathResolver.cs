@@ -21,109 +21,94 @@ using System;
 using System.IO;
 using System.Reflection;
 
-namespace NetNativeLibLoader.PathResolver
+namespace NetNativeLibLoader.PathResolver;
+
+internal class LocalPathResolver : IPathResolver
 {
-    internal class LocalPathResolver : IPathResolver
+    public ResolvePathResult Resolve(string library)
     {
-        private readonly string _entryAssemblyDirectory;
-        private readonly string _executingAssemblyDirectory;
-        private readonly string _currentDirectory;
-
-        public LocalPathResolver()
+        // First, check next to the entry executable
+        if (_entryAssemblyDirectory != null)
         {
-            var entryAssembly = Assembly.GetEntryAssembly();
-            if (entryAssembly != null)
-            {
-                var entryLocation = entryAssembly.Location;
-                if (!string.IsNullOrEmpty(entryLocation))
-                {
-                    var parent = Directory.GetParent(entryLocation);
-                    _entryAssemblyDirectory = parent != null ? parent.FullName : entryLocation;
-                }
-                else
-                {
-                    var parent = Directory.GetParent(Directory.GetCurrentDirectory());
-                    _entryAssemblyDirectory = parent != null ? parent.FullName : Directory.GetCurrentDirectory(); 
-                }
-            }
-            else
-            {
-                _entryAssemblyDirectory = null;
-            }
+            var result = ScanPathForLibrary(_entryAssemblyDirectory, library);
+            if (result.IsSuccess)
+                return result;
+        }
 
-            var executingLocation = Assembly.GetExecutingAssembly().Location;
-            if (!string.IsNullOrEmpty(executingLocation))
+        if (_executingAssemblyDirectory != null)
+        {
+            var result = ScanPathForLibrary(_executingAssemblyDirectory, library);
+            if (result.IsSuccess)
+                return result;
+        }
+
+        // Then, check the current directory
+        if (_currentDirectory != null)
+        {
+            var result = ScanPathForLibrary(_currentDirectory, library);
+            if (result.IsSuccess)
+                return result;
+        }
+
+        return ResolvePathResult.FromError(new FileNotFoundException("No local copy of the given library could be found.", library));
+    }
+
+    public LocalPathResolver()
+    {
+        var entryAssembly = Assembly.GetEntryAssembly();
+        if (entryAssembly != null)
+        {
+            var entryLocation = entryAssembly.Location;
+            if (!string.IsNullOrEmpty(entryLocation))
             {
-                var parent = Directory.GetParent(executingLocation);
-                _executingAssemblyDirectory = parent != null ? parent.FullName : executingLocation;
+                var parent = Directory.GetParent(entryLocation);
+                _entryAssemblyDirectory = parent != null ? parent.FullName : entryLocation;
             }
             else
             {
                 var parent = Directory.GetParent(Directory.GetCurrentDirectory());
-                _executingAssemblyDirectory = parent != null ? parent.FullName : Directory.GetCurrentDirectory(); 
+                _entryAssemblyDirectory = parent != null ? parent.FullName : Directory.GetCurrentDirectory();
             }
-
-            _currentDirectory = Directory.GetCurrentDirectory();
         }
-
-        public ResolvePathResult Resolve(string library)
+        else
         {
-            // First, check next to the entry executable
-            if (!(_entryAssemblyDirectory is null))
-            {
-                var result = ScanPathForLibrary(_entryAssemblyDirectory, library);
-                if (result.IsSuccess)
-                {
-                    return result;
-                }
-            }
-
-            if (!(_executingAssemblyDirectory is null))
-            {
-                var result = ScanPathForLibrary(_executingAssemblyDirectory, library);
-                if (result.IsSuccess)
-                {
-                    return result;
-                }
-            }
-
-            // Then, check the current directory
-            if (!(_currentDirectory is null))
-            {
-                var result = ScanPathForLibrary(_currentDirectory, library);
-                if (result.IsSuccess)
-                {
-                    return result;
-                }
-            }
-
-            return ResolvePathResult.FromError(new FileNotFoundException("No local copy of the given library could be found.", library));
+            _entryAssemblyDirectory = null;
         }
 
-        private ResolvePathResult ScanPathForLibrary(string path, string library)
+        var executingLocation = Assembly.GetExecutingAssembly().Location;
+        if (!string.IsNullOrEmpty(executingLocation))
         {
-            var libraryLocation = Path.GetFullPath(Path.Combine(path, library));
-            if (File.Exists(libraryLocation))
-            {
-                return ResolvePathResult.FromSuccess(libraryLocation);
-            }
-
-            // Check the local library directory
-            libraryLocation = Path.GetFullPath(Path.Combine(path, "lib", library));
-            if (File.Exists(libraryLocation))
-            {
-                return ResolvePathResult.FromSuccess(libraryLocation);
-            }
-
-            // Check platform-specific directory
-            var bitness = Environment.Is64BitProcess ? "x64" : "x86";
-            libraryLocation = Path.GetFullPath(Path.Combine(path, "lib", bitness, library));
-            if (File.Exists(libraryLocation))
-            {
-                return ResolvePathResult.FromSuccess(libraryLocation);
-            }
-
-            return ResolvePathResult.FromError(new FileNotFoundException("No local copy of the given library could be found.", library));
+            var parent = Directory.GetParent(executingLocation);
+            _executingAssemblyDirectory = parent != null ? parent.FullName : executingLocation;
         }
+        else
+        {
+            var parent = Directory.GetParent(Directory.GetCurrentDirectory());
+            _executingAssemblyDirectory = parent != null ? parent.FullName : Directory.GetCurrentDirectory();
+        }
+
+        _currentDirectory = Directory.GetCurrentDirectory();
+    }
+
+    private readonly string? _entryAssemblyDirectory;
+    private readonly string? _executingAssemblyDirectory;
+    private readonly string? _currentDirectory;
+
+    private ResolvePathResult ScanPathForLibrary(string path, string library)
+    {
+        var libraryLocation = Path.GetFullPath(Path.Combine(path, library));
+        if (File.Exists(libraryLocation))
+            return ResolvePathResult.FromSuccess(libraryLocation);
+
+        // Check the local library directory
+        libraryLocation = Path.GetFullPath(Path.Combine(path, "lib", library));
+        if (File.Exists(libraryLocation))
+            return ResolvePathResult.FromSuccess(libraryLocation);
+
+        // Check platform-specific directory
+        libraryLocation = Path.GetFullPath(Path.Combine(path, "lib", Environment.Is64BitProcess ? "x64" : "x86", library));
+        return File.Exists(libraryLocation)
+                   ? ResolvePathResult.FromSuccess(libraryLocation)
+                   : ResolvePathResult.FromError(new FileNotFoundException("No local copy of the given library could be found.", library));
     }
 }

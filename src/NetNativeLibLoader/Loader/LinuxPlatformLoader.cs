@@ -17,11 +17,10 @@
 //  along with this program.  If not, see <http://www.gnu.org/licenses/>.
 //
 
-namespace NetNativeLibLoader.Loader
+namespace NetNativeLibLoader.Loader;
+
+internal class LinuxPlatformLoader : UnixPlatformLoader
 {
-    internal class LinuxPlatformLoader : UnixPlatformLoader
-    {
-        /// <inheritdoc />
-        protected override bool UseCLibrary => false;
-    }
+    /// <inheritdoc />
+    protected override bool UseCLibrary => false;
 }

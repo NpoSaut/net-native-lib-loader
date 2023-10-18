@@ -17,10 +17,9 @@
 //  along with this program.  If not, see <http://www.gnu.org/licenses/>.
 //
 
-namespace NetNativeLibLoader.PathResolver
+namespace NetNativeLibLoader.PathResolver;
+
+public interface IPathResolver
 {
-    public interface IPathResolver
-    {
-        ResolvePathResult Resolve(string library);
-    }
+    ResolvePathResult Resolve(string library);
 }

@@ -17,10 +17,9 @@
 //  along with this program.  If not, see <http://www.gnu.org/licenses/>.
 //
 
-namespace NetNativeLibLoader.Loader
+namespace NetNativeLibLoader.Loader;
+
+internal class BsdPlatformLoader : UnixPlatformLoader
 {
-    internal class BSDPlatformLoader : UnixPlatformLoader
-    {
-        protected override bool UseCLibrary => true;
-    }
+    protected override bool UseCLibrary => true;
 }

@@ -18,46 +18,35 @@
 //
 
 using System;
+using System.Diagnostics.CodeAnalysis;
 
-namespace NetNativeLibLoader.PathResolver
+namespace NetNativeLibLoader.PathResolver;
+
+[SuppressMessage("ReSharper", "UnusedAutoPropertyAccessor.Global")]
+public struct ResolvePathResult
 {
-    public struct ResolvePathResult
+    private readonly bool? _isSuccess;
+
+    public string?    Path        { get; }
+    public string?    ErrorReason { get; }
+    public Exception? Exception   { get; }
+
+    public readonly bool IsSuccess => _isSuccess.HasValue && _isSuccess.Value;
+
+    private ResolvePathResult(string? path, string? errorReason, bool? isSuccess, Exception? exception)
     {
-        public string Path { get; }
-
-        public string ErrorReason { get; }
-
-        public bool IsSuccess { get; }
-
-        public Exception Exception { get; }
-
-        private ResolvePathResult
-        (
-            string path,
-            string errorReason,
-            bool isSuccess,
-            Exception exception
-        )
-        {
-            Path = path;
-            ErrorReason = errorReason;
-            IsSuccess = isSuccess;
-            Exception = exception;
-        }
-
-        public static ResolvePathResult FromSuccess(string resolvedPath)
-        {
-            return new ResolvePathResult(resolvedPath, null, true, null);
-        }
-
-        public static ResolvePathResult FromError(string errorReason)
-        {
-            return new ResolvePathResult(null, errorReason, false, null);
-        }
-
-        public static ResolvePathResult FromError(Exception exception)
-        {
-            return new ResolvePathResult(null, exception.Message, false, exception);
-        }
+        Path        = path;
+        ErrorReason = errorReason;
+        _isSuccess  = isSuccess;
+        Exception   = exception;
     }
+
+    public static ResolvePathResult FromSuccess(string? resolvedPath) =>
+        new(resolvedPath, null, true, null);
+
+    public static ResolvePathResult FromError(string? errorReason) =>
+        new(null, errorReason, false, null);
+
+    public static ResolvePathResult FromError(Exception? exception) =>
+        new(null, exception?.Message, false, exception);
 }

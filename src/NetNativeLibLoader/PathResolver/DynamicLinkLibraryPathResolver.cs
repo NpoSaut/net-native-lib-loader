@@ -23,180 +23,118 @@ using System.IO;
 using System.Linq;
 using System.Runtime.InteropServices;
 
-namespace NetNativeLibLoader.PathResolver
+namespace NetNativeLibLoader.PathResolver;
+
+public class DynamicLinkLibraryPathResolver : IPathResolver
 {
-    public class DynamicLinkLibraryPathResolver : IPathResolver
+    public ResolvePathResult Resolve(string library) => ResolveAbsolutePath(library, SearchLocalFirst);
+
+    static DynamicLinkLibraryPathResolver()
     {
-        private static readonly IPathResolver LocalPathResolver;
+        _localPathResolver = new LocalPathResolver();
+        _pathResolver      = SelectPathResolver();
+    }
 
-        private static readonly IPathResolver PathResolver;
+    public DynamicLinkLibraryPathResolver(bool searchLocalFirst = true) => SearchLocalFirst = searchLocalFirst;
 
-        private bool SearchLocalFirst { get; }
+    private static readonly IPathResolver _localPathResolver;
+    private static readonly IPathResolver _pathResolver;
 
-        static DynamicLinkLibraryPathResolver()
+    private bool SearchLocalFirst { get; }
+
+    private static IPathResolver SelectPathResolver()
+    {
+        if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
+            return new WindowsPathResolver();
+
+        /*
+            Temporary hack until BSD is added to RuntimeInformation. OSDescription should contain the output from
+            "uname -srv", which will report something along the lines of FreeBSD or OpenBSD plus some more info.
+        */
+        var isBsd = RuntimeInformation.OSDescription.ToUpperInvariant().Contains("BSD");
+        if (RuntimeInformation.IsOSPlatform(OSPlatform.Linux) || isBsd)
+            return new LinuxPathResolver();
+
+        if (RuntimeInformation.IsOSPlatform(OSPlatform.OSX))
+            return new MacOsPathResolver();
+
+        throw new PlatformNotSupportedException($"Cannot resolve linker paths on this platform: {RuntimeInformation.OSDescription}");
+    }
+
+    private ResolvePathResult ResolveAbsolutePath(string library, bool localFirst)
+    {
+        var candidates = GenerateLibraryCandidates(library).ToList();
+
+        if (library.IsValidPath())
+            foreach (var candidate in candidates.Where(File.Exists))
+                return ResolvePathResult.FromSuccess(Path.GetFullPath(candidate));
+
+        // Check the native probing paths (.NET Core defines this, Mono doesn't. Users can set this at runtime, too)
+        if (AppContext.GetData("NATIVE_DLL_SEARCH_DIRECTORIES") is string directories)
+            foreach (var path in directories.Split(new[] { ':' }, StringSplitOptions.RemoveEmptyEntries))
+            foreach (var candidatePath in candidates.Select(candidate => Path.Combine(path, candidate)).Where(File.Exists))
+                return ResolvePathResult.FromSuccess(Path.GetFullPath(candidatePath));
+
+        if (localFirst)
+            foreach (var result in candidates.Select(candidate => _localPathResolver.Resolve(candidate)).Where(result => result.IsSuccess))
+                return result;
+
+        foreach (var result in candidates.Select(candidate => _pathResolver.Resolve(candidate)).Where(result => result.IsSuccess))
+            return result;
+
+        return library == "__Internal"
+                   ? ResolvePathResult.FromSuccess(null)
+                   : // Mono extension: Search the main program. Allowed for all runtimes
+                   ResolvePathResult.FromError(new FileNotFoundException("The specified library was not found in any of the loader search paths.", library));
+    }
+
+    private static IEnumerable<string> GenerateLibraryCandidates(string library)
+    {
+        var doesLibraryContainPath = false;
+
+        if (library.IsValidPath())
         {
-            LocalPathResolver = new LocalPathResolver();
-            PathResolver = SelectPathResolver();
+            library                = Path.GetFileName(library);
+            doesLibraryContainPath = true;
         }
 
-        public DynamicLinkLibraryPathResolver(bool searchLocalFirst = true)
-        {
-            SearchLocalFirst = searchLocalFirst;
-        }
+        var candidates = new List<string> { library };
 
-        private static IPathResolver SelectPathResolver()
-        {
-            if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
-            {
-                return new WindowsPathResolver();
-            }
+        if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows) && !library.EndsWith(".dll"))
+            candidates.AddRange(GenerateWindowsCandidates(library));
 
-            /*
-                Temporary hack until BSD is added to RuntimeInformation. OSDescription should contain the output from
-                "uname -srv", which will report something along the lines of FreeBSD or OpenBSD plus some more info.
-            */
-            bool isBSD = RuntimeInformation.OSDescription.ToUpperInvariant().Contains("BSD");
-            if (RuntimeInformation.IsOSPlatform(OSPlatform.Linux) || isBSD)
-            {
-                return new LinuxPathResolver();
-            }
+        var isBsd = RuntimeInformation.OSDescription.ToUpperInvariant().Contains("BSD");
+        if (RuntimeInformation.IsOSPlatform(OSPlatform.Linux) || isBsd || RuntimeInformation.IsOSPlatform(OSPlatform.OSX))
+            candidates.AddRange(GenerateUnixCandidates(library));
 
-            if (RuntimeInformation.IsOSPlatform(OSPlatform.OSX))
-            {
-                return new MacOSPathResolver();
-            }
+        // If we have a parent path we're looking at, mutate the candidate list to include the parent path
+        if (doesLibraryContainPath)
+            candidates = candidates.Select(c => Path.Combine(Path.GetDirectoryName(library) ?? string.Empty, c)).ToList();
 
-            throw new PlatformNotSupportedException($"Cannot resolve linker paths on this platform: {RuntimeInformation.OSDescription}");
-        }
+        return candidates;
+    }
 
-        public ResolvePathResult Resolve(string library)
-        {
-            return ResolveAbsolutePath(library, SearchLocalFirst);
-        }
+    private static IEnumerable<string> GenerateWindowsCandidates(string library)
+    {
+        yield return $"{library}.dll";
+    }
 
-        private ResolvePathResult ResolveAbsolutePath(string library, bool localFirst)
-        {
-            var candidates = GenerateLibraryCandidates(library).ToList();
+    private static IEnumerable<string> GenerateUnixCandidates(string library)
+    {
+        const string prefix = "lib";
 
-            if (library.IsValidPath())
-            {
-                foreach (var candidate in candidates)
-                {
-                    if (File.Exists(candidate))
-                    {
-                        return ResolvePathResult.FromSuccess(Path.GetFullPath(candidate));
-                    }
-                }
-            }
+        var suffix = RuntimeInformation.IsOSPlatform(OSPlatform.OSX) ? ".dylib" : ".so";
 
-            // Check the native probing paths (.NET Core defines this, Mono doesn't. Users can set this at runtime, too)
-            if (AppContext.GetData("NATIVE_DLL_SEARCH_DIRECTORIES") is string directories)
-            {
-                var paths = directories.Split(new[] { ':' }, StringSplitOptions.RemoveEmptyEntries);
-                foreach (var path in paths)
-                {
-                    foreach (var candidate in candidates)
-                    {
-                        var candidatePath = Path.Combine(path, candidate);
-                        if (File.Exists(candidatePath))
-                        {
-                            return ResolvePathResult.FromSuccess(Path.GetFullPath(candidatePath));
-                        }
-                    }
-                }
-            }
+        var noSuffix = !library.EndsWith(suffix);
+        var noPrefix = !Path.GetFileName(library).StartsWith(prefix);
 
-            if (localFirst)
-            {
-                foreach (var candidate in candidates)
-                {
-                    var result = LocalPathResolver.Resolve(candidate);
-                    if (result.IsSuccess)
-                    {
-                        return result;
-                    }
-                }
-            }
+        if (noSuffix)
+            yield return $"{library}{suffix}";
 
-            foreach (var candidate in candidates)
-            {
-                var result = PathResolver.Resolve(candidate);
-                if (result.IsSuccess)
-                {
-                    return result;
-                }
-            }
+        if (noPrefix)
+            yield return $"{prefix}{library}";
 
-            if (library == "__Internal")
-            {
-                // Mono extension: Search the main program. Allowed for all runtimes
-                return ResolvePathResult.FromSuccess(null);
-            }
-
-            return ResolvePathResult.FromError(new FileNotFoundException("The specified library was not found in any of the loader search paths.", library));
-        }
-
-        private static IEnumerable<string> GenerateLibraryCandidates(string library)
-        {
-            bool doesLibraryContainPath = false;
-            var parentDirectory = Path.GetDirectoryName(library) ?? string.Empty;
-            if (library.IsValidPath())
-            {
-                library = Path.GetFileName(library);
-                doesLibraryContainPath = true;
-            }
-
-            var candidates = new List<string>
-            {
-                library
-            };
-
-            if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows) && !library.EndsWith(".dll"))
-            {
-                candidates.AddRange(GenerateWindowsCandidates(library));
-            }
-
-            bool isBSD = RuntimeInformation.OSDescription.ToUpperInvariant().Contains("BSD");
-            if (RuntimeInformation.IsOSPlatform(OSPlatform.Linux) || isBSD || RuntimeInformation.IsOSPlatform(OSPlatform.OSX))
-            {
-                candidates.AddRange(GenerateUnixCandidates(library));
-            }
-
-            // If we have a parent path we're looking at, mutate the candidate list to include the parent path
-            if (doesLibraryContainPath)
-            {
-                candidates = candidates.Select(c => Path.Combine(parentDirectory, c)).ToList();
-            }
-
-            return candidates;
-        }
-
-        private static IEnumerable<string> GenerateWindowsCandidates(string library)
-        {
-            yield return $"{library}.dll";
-        }
-
-        private static IEnumerable<string> GenerateUnixCandidates(string library)
-        {
-            const string prefix = "lib";
-            var suffix = RuntimeInformation.IsOSPlatform(OSPlatform.OSX) ? ".dylib" : ".so";
-
-            var noSuffix = !library.EndsWith(suffix);
-            var noPrefix = !Path.GetFileName(library).StartsWith(prefix);
-            if (noSuffix)
-            {
-                yield return $"{library}{suffix}";
-            }
-
-            if (noPrefix)
-            {
-                yield return $"{prefix}{library}";
-            }
-
-            if (noPrefix && noSuffix)
-            {
-                yield return $"{prefix}{library}{suffix}";
-            }
-        }
+        if (noPrefix && noSuffix)
+            yield return $"{prefix}{library}{suffix}";
     }
 }
