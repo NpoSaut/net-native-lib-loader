@@ -7,7 +7,9 @@
     </PropertyGroup>
 
     <PropertyGroup Condition=" '$(Configuration)' == 'Release' ">
-        <DebugType>none</DebugType>
+        <DebugType>embedded</DebugType>
+        <WarningLevel>8</WarningLevel>
+        <DebugSymbols>true</DebugSymbols>
     </PropertyGroup>
 
 </Project>
