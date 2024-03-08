@@ -26,11 +26,11 @@ internal abstract class UnixPlatformLoader : PlatformLoaderBase
 {
     protected UnixPlatformLoader()
     {
-        _resetErrorAction = () => dl.ResetError(UseCLibrary);
-        _openLibraryFunc  = (s,   flags) => dl.open(s, flags, UseCLibrary);
-        _openSymbolFunc   = (ptr, s) => dl.sym(ptr, s, UseCLibrary);
-        _closeLibraryFunc = ptr => dl.close(ptr, UseCLibrary);
-        _getErrorFunc     = () => dl.error(UseCLibrary);
+        _resetErrorAction = () => dl.ResetError(LibraryType);
+        _openLibraryFunc  = (s,   flags) => dl.open(s, flags, LibraryType);
+        _openSymbolFunc   = (ptr, s) => dl.sym(ptr, s, LibraryType);
+        _closeLibraryFunc = ptr => dl.close(ptr, LibraryType);
+        _getErrorFunc     = () => dl.error(LibraryType);
     }
 
     public override IntPtr LoadSymbol(IntPtr library, string symbolName)
@@ -72,7 +72,7 @@ internal abstract class UnixPlatformLoader : PlatformLoaderBase
         throw new Exception($"Library could not be loaded: {Marshal.PtrToStringAnsi(errorPtr)}: {path}");
     }
 
-    protected abstract bool UseCLibrary { get; }
+    protected abstract byte LibraryType { get; }
 
     protected override IntPtr LoadLibraryInternal(string path) => LoadLibrary(path, SymbolFlag.RTLD_DEFAULT);
 }

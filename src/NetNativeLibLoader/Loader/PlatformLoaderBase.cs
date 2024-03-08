@@ -35,8 +35,11 @@ public abstract class PlatformLoaderBase : IPlatformLoader
         if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
             return new WindowsPlatformLoader();
 
-        if (RuntimeInformation.IsOSPlatform(OSPlatform.Linux))
+        if (RuntimeInformation.IsOSPlatform(OSPlatform.Linux) && RuntimeInformation.ProcessArchitecture != Architecture.Arm)
             return new LinuxPlatformLoader();
+        
+        if (RuntimeInformation.IsOSPlatform(OSPlatform.Linux) && RuntimeInformation.ProcessArchitecture == Architecture.Arm)
+            return new LinuxArmPlatformLoader();
 
         /*
             Temporary hack until BSD is added to RuntimeInformation. OSDescription should contain the output from

@@ -28,29 +28,50 @@ namespace NetNativeLibLoader.Loader;
 
 internal static class dl
 {
-    public static IntPtr open(string fileName, SymbolFlag flags = SymbolFlag.RTLD_DEFAULT, bool useCLibrary = false) =>
-        useCLibrary ? BSD.dlopen(fileName, flags) : Unix.dlopen(fileName, flags);
+    public static IntPtr open(string fileName, SymbolFlag flags = SymbolFlag.RTLD_DEFAULT, byte libraryType = 0) =>
+        libraryType switch
+        {
+            0 => BSD.dlopen(fileName, flags),
+            1 => Unix.dlopen(fileName, flags),
+            _ => UnixArm.dlopen(fileName, flags)
+        };
 
     [Pure]
-    public static IntPtr sym(IntPtr handle, string name, bool useCLibrary = false) =>
-        useCLibrary ? BSD.dlsym(handle, name) : Unix.dlsym(handle, name);
+    public static IntPtr sym(IntPtr handle, string name, byte libraryType = 0) =>
+        libraryType switch
+        {
+            0 => BSD.dlsym(handle, name),
+            1 => Unix.dlsym(handle, name),
+            _ => UnixArm.dlsym(handle, name)
+        };
 
-    public static int close(IntPtr handle, bool useCLibrary = false) =>
-        useCLibrary ? BSD.dlclose(handle) : Unix.dlclose(handle);
+    public static int close(IntPtr handle, byte libraryType = 0) =>
+        libraryType switch
+        {
+            0 => BSD.dlclose(handle),
+            1 => Unix.dlclose(handle),
+            _ => UnixArm.dlclose(handle)
+        };
 
-    public static IntPtr error(bool useCLibrary = false) =>
-        useCLibrary ? BSD.dlerror() : Unix.dlerror();
+    public static IntPtr error(byte libraryType = 0) =>
+        libraryType switch
+        {
+            0 => BSD.dlerror(),
+            1 => Unix.dlerror(),
+            _ => UnixArm.dlerror()
+        };
 
-    public static void ResetError(bool useCLibrary = false)
+    public static void ResetError(byte libraryType = 0)
     {
         // Clear any outstanding errors by looping until no error is found
-        while (error(useCLibrary) != IntPtr.Zero)
+        while (error(libraryType) != IntPtr.Zero)
         {
         }
     }
 
-    private const string LibraryNameUnix = "dl";
-    private const string LibraryNameBSD  = "c";
+    private const string LibraryNameArmUnix = "dl";
+    private const string LibraryNameUnix    = "dl.so.2";
+    private const string LibraryNameBSD     = "c";
 
     private static class Unix
     {
@@ -64,6 +85,21 @@ internal static class dl
         public static extern int dlclose(IntPtr handle);
 
         [DllImport(LibraryNameUnix)]
+        public static extern IntPtr dlerror();
+    }
+    
+    private static class UnixArm
+    {
+        [DllImport(LibraryNameArmUnix)]
+        public static extern IntPtr dlopen(string fileName, SymbolFlag flags);
+
+        [DllImport(LibraryNameArmUnix)]
+        public static extern IntPtr dlsym(IntPtr handle, string name);
+
+        [DllImport(LibraryNameArmUnix)]
+        public static extern int dlclose(IntPtr handle);
+
+        [DllImport(LibraryNameArmUnix)]
         public static extern IntPtr dlerror();
     }
 

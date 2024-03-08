@@ -21,5 +21,5 @@ namespace NetNativeLibLoader.Loader;
 
 internal class BsdPlatformLoader : UnixPlatformLoader
 {
-    protected override bool UseCLibrary => true;
+    protected override byte LibraryType => 0;
 }

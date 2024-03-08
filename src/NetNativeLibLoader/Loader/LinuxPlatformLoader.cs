@@ -22,5 +22,11 @@ namespace NetNativeLibLoader.Loader;
 internal class LinuxPlatformLoader : UnixPlatformLoader
 {
     /// <inheritdoc />
-    protected override bool UseCLibrary => false;
+    protected override byte LibraryType => 1;
+}
+
+internal class LinuxArmPlatformLoader : UnixPlatformLoader
+{
+    /// <inheritdoc />
+    protected override byte LibraryType => 2;
 }
